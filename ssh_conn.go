@@ -25,6 +25,18 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+func main() {
+	var listen = flag.String("listen", ":8080", "Host:port to listen on")
+	nap := napnap.New()
+	flag.Parse()
+	router := napnap.NewRouter()
+	router.Get("/ssh", napnap.WrapHandler(http.HandlerFunc(sshWebsocket)))
+	nap.Use(router)
+	httpengine := napnap.NewHttpEngine(*listen)
+	println("start")
+	log.Fatal(nap.Run(httpengine))
+}
+
 func sshWebsocket(w http.ResponseWriter, r *http.Request) {
 	//upgrade http to websocket
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -93,28 +105,22 @@ func sshWebsocket(w http.ResponseWriter, r *http.Request) {
 	//read from terminal and write to frontend
 	go func() {
 		defer func() {
-			defer conn.Close()
-			defer sshConn.Close()
-			defer session.Close()
+			conn.Close()
+			sshConn.Close()
+			session.Close()
 		}()
 
 		for {
 			buf := make([]byte, 4096)
 			_, err := sshReader.Read(buf)
 			if err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseServiceRestart) {
-					log.Fatal(err)
-					return
-				}
 				log.Print(err)
+				return
 			}
 			err = conn.WriteMessage(websocket.BinaryMessage, buf)
 			if err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseServiceRestart) {
-					log.Fatal(err)
-					return
-				}
 				log.Print(err)
+				return
 			}
 		}
 	}()
@@ -122,30 +128,24 @@ func sshWebsocket(w http.ResponseWriter, r *http.Request) {
 	//read from frontend and write to terminal
 	go func() {
 		defer func() {
-			defer conn.Close()
-			defer sshConn.Close()
-			defer session.Close()
+			conn.Close()
+			sshConn.Close()
+			session.Close()
 		}()
 
 		for {
 			// set up io.Reader of websocket
 			_, reader, err := conn.NextReader()
 			if err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseServiceRestart) {
-					log.Fatal(err)
-					return
-				}
 				log.Print(err)
+				return
 			}
 			// read first byte to determine whether to pass data or resize terminal
 			dataTypeBuf := make([]byte, 1)
 			_, err = reader.Read(dataTypeBuf)
 			if err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseServiceRestart) {
-					log.Fatal(err)
-					return
-				}
 				log.Print(err)
+				return
 			}
 
 			switch dataTypeBuf[0] {
@@ -154,16 +154,14 @@ func sshWebsocket(w http.ResponseWriter, r *http.Request) {
 				buf := make([]byte, 1024)
 				_, err := reader.Read(buf)
 				if err != nil {
-					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseServiceRestart) {
-						log.Fatal(err)
-						return
-					}
 					log.Print(err)
+					return
 				}
 				_, err = sshWriter.Write(buf)
 				if err != nil {
 					log.Print(err)
 					conn.WriteMessage(websocket.BinaryMessage, []byte(err.Error()))
+					return
 				}
 			// when resize terminal
 			case 1:
@@ -189,23 +187,10 @@ func sshWebsocket(w http.ResponseWriter, r *http.Request) {
 
 	// Start remote shell
 	if err := session.Shell(); err != nil {
-		log.Fatal("failed to start shell: ", err)
+		log.Println("failed to start shell: ", err)
 	}
 
 	if err := session.Wait(); err != nil {
-		log.Fatal("failed to wait shell: ", err)
+		log.Println("failed to wait shell: ", err)
 	}
-
-}
-
-func main() {
-	var listen = flag.String("listen", ":8080", "Host:port to listen on")
-	nap := napnap.New()
-	flag.Parse()
-	router := napnap.NewRouter()
-	router.Get("/ssh", napnap.WrapHandler(http.HandlerFunc(sshWebsocket)))
-	nap.Use(router)
-	httpengine := napnap.NewHttpEngine(*listen)
-	println("start")
-	log.Fatal(nap.Run(httpengine))
 }

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="node_modules/xterm/dist/xterm.css">
+    <script src="node_modules/xterm/dist/xterm.js"></script>
+    <meta charset="UTF-8">
+    <title>go_term</title>
+</head>
+<body>
+<div id="terminal"></div>
+<script>
+        var term
+        var terminalContainer = document.getElementById('terminal')
+        var websocket = new WebSocket('ws://127.0.0.1:8080/ssh');
+
+        function ab2str(buf) {
+          return new TextDecoder().decode(buf);
+        }
+
+        term = new Terminal({
+            cursorBlink: true
+        });
+
+        websocket.binaryType = "arraybuffer";
+        websocket.onopen = function(evt){
+            term.on('data', function(data) {
+			    websocket.send(new TextEncoder().encode("\x00" + data));
+            });
+
+            term.on('resize', function(evt) { 
+                websocket.send(new TextEncoder().encode("\x01" + JSON.stringify({cols: evt.cols, rows: evt.rows})))
+            });
+
+            term.open(terminalContainer, true);
+            term.resize(120,30);
+            websocket.onmessage = function(evt) {
+                if (evt.data instanceof ArrayBuffer) {
+                    term.write(ab2str(evt.data));
+                } else {
+                    alert(evt.data)
+                }
+            }
+
+            websocket.onclose = function(evt) {
+                term.write("\r\nSession terminated");
+            }
+
+            websocket.onerror = function(evt) {
+                if (typeof console.log == "function") {
+                    console.log(evt)
+                }
+            }
+        }
+</script>
+</body>
+</html>

@@ -20,7 +20,7 @@
         term = new Terminal({
             cursorBlink: true
         });
-
+        
         websocket.binaryType = "arraybuffer";
         websocket.onopen = function(evt){
             term.on('data', function(data) {

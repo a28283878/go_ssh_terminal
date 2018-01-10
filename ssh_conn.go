@@ -112,12 +112,12 @@ func sshWebsocket(w http.ResponseWriter, r *http.Request) {
 
 		for {
 			buf := make([]byte, 4096)
-			_, err := sshReader.Read(buf)
+			n, err := sshReader.Read(buf)
 			if err != nil {
 				log.Print(err)
 				return
 			}
-			err = conn.WriteMessage(websocket.BinaryMessage, buf)
+			err = conn.WriteMessage(websocket.BinaryMessage, buf[:n])
 			if err != nil {
 				log.Print(err)
 				return
@@ -152,12 +152,12 @@ func sshWebsocket(w http.ResponseWriter, r *http.Request) {
 			// when pass data
 			case 0:
 				buf := make([]byte, 1024)
-				_, err := reader.Read(buf)
+				n, err := reader.Read(buf)
 				if err != nil {
 					log.Print(err)
 					return
 				}
-				_, err = sshWriter.Write(buf)
+				_, err = sshWriter.Write(buf[:n])
 				if err != nil {
 					log.Print(err)
 					conn.WriteMessage(websocket.BinaryMessage, []byte(err.Error()))
